@@ -22,4 +22,4 @@ This tool parses HTML files of project pages and converts them into clean, struc
 ## 🛠 Usage
 
 ```bash
-python3.11 parse_project.py <html_file_path_or_directory> [output_directory]
+python3.11 markdown_archiver.py <html_file_path_or_directory> [output_directory]

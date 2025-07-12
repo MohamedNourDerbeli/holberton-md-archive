@@ -8,7 +8,7 @@ def parse_project_html(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
 
     # Extract Project Title (H1 tag)
-    project_title_tag = soup.find('h1')
+    project_title_tag = soup.find('div', class_='project-header').find('h1') if soup.find('div', class_='project-header') else None
     project_title = project_title_tag.get_text(strip=True) if project_title_tag else 'No Project Title Found'
     # Sanitize title for filename
     sanitized_title = re.sub(r'[^a-zA-Z0-9_\-]', '', project_title.replace(' ', '_'))
@@ -17,8 +17,6 @@ def parse_project_html(html_content):
 
     # Extract Project Image URL
     project_image_url = None
-    # The image is usually within a div with class 'panel-body text-justify' or similar
-    # Let's try to find it more robustly
     main_image_div = soup.find('div', class_='panel-body text-justify')
     if main_image_div:
         img_tag = main_image_div.find('img')
@@ -29,10 +27,8 @@ def parse_project_html(html_content):
     project_description = ''
     description_panel_body = soup.find('div', class_='panel-body text-justify')
     if description_panel_body:
-        # Remove the image tag if it exists to avoid including it in the text description
         if main_image_div and img_tag:
-            img_tag.extract() # Remove the image from the description body
-        # Extract text from paragraphs within the description panel
+            img_tag.extract()
         paragraphs = description_panel_body.find_all('p')
         project_description = '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
 
@@ -42,7 +38,7 @@ def parse_project_html(html_content):
     if resources_section:
         current_tag = resources_section.next_sibling
         while current_tag:
-            if current_tag.name == 'h2': # Stop at the next main heading
+            if current_tag.name == 'h2':
                 break
             if current_tag.name == 'h4':
                 resources_markdown += f"#### {current_tag.get_text(strip=True)}\n\n"
@@ -70,7 +66,6 @@ def parse_project_html(html_content):
     requirements_h2 = soup.find('h2', string='Requirements')
     requirements_markdown = ''
     if requirements_h2:
-        # Assuming requirements are directly under h3 and then ul
         h3_tag = requirements_h2.find_next_sibling('h3')
         if h3_tag:
             requirements_markdown += f"### {h3_tag.get_text(strip=True)}\n\n"
@@ -79,6 +74,44 @@ def parse_project_html(html_content):
                 for li in ul_tag.find_all('li'):
                     requirements_markdown += f"* {li.get_text(strip=True)}\n"
                 requirements_markdown += "\n"
+
+    # Extract Tasks
+    tasks_markdown = ''
+    task_containers = soup.find_all('div', class_='panel panel-default task-card')
+    for task_div in task_containers:
+        # Skip the 'Tasks list' panel if it exists
+        if task_div.find('h3', string='Tasks list'):
+            continue
+
+        task_title = task_div.find('h3', class_='panel-title')
+        task_body = task_div.find('div', class_='panel-body')
+        task_repo_info = task_div.find('div', class_='list-group-item')
+
+        title = task_title.get_text(strip=True) if task_title else 'No Title'
+        tasks_markdown += f"### {title}\n\n"
+
+        if task_body:
+            body_paragraphs = task_body.find_all('p', recursive=False)
+            for p in body_paragraphs:
+                tasks_markdown += f"{p.get_text(strip=True)}\n\n"
+
+            body_lists = task_body.find_all('ul', recursive=False)
+            for ul in body_lists:
+                for li in ul.find_all('li'):
+                    tasks_markdown += f"* {li.get_text(strip=True)}\n"
+                tasks_markdown += "\n"
+
+            code_example = task_body.find('pre')
+            if code_example:
+                tasks_markdown += f"```bash\n{code_example.get_text(strip=True)}\n```\n\n"
+
+        if task_repo_info:
+            tasks_markdown += f"**Repo Info:**\n"
+            repo_ul = task_repo_info.find('ul')
+            if repo_ul:
+                for li in repo_ul.find_all('li'):
+                    tasks_markdown += f"* {li.get_text(strip=True)}\n"
+                tasks_markdown += "\n"
 
     # Construct the final Markdown output
     markdown_output = f"# Project: {project_title}\n\n"
@@ -96,6 +129,9 @@ def parse_project_html(html_content):
 
     if requirements_markdown:
         markdown_output += f"## Requirements\n\n{requirements_markdown}\n"
+
+    if tasks_markdown:
+        markdown_output += f"## Tasks\n\n{tasks_markdown}\n"
 
     return markdown_output, sanitized_title
 
@@ -142,3 +178,4 @@ if __name__ == "__main__":
             f.write(markdown_output)
 
         print(f"Project information successfully extracted from {html_file_path} and saved to {output_filename}")
+
